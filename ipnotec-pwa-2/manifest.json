@@ -1,0 +1,24 @@
+{
+  "name": "Ipnotec",
+  "short_name": "Ipnotec",
+  "description": "Screensaver ipnotico per musicisti. Per chi pensa in note.",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#DCE9F5",
+  "theme_color": "#DCE9F5",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

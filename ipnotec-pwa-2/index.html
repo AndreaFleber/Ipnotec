@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ipnotec</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#DCE9F5">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ipnotec">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #dce9f5;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  cursor: none;
+}
+
+/* ── BACKGROUND ── */
+.bg {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at 45% 40%, #eef6ff 0%, #dce9f5 55%, #c8daee 100%);
+}
+
+/* ── STAFF CONTAINER ── */
+.staves {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Each staff group: 5 lines, scrolls right to left */
+.staff {
+  position: absolute;
+  left: -120%;
+  width: 320%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  animation: scroll linear infinite;
+  animation-duration: var(--dur);
+  animation-delay: var(--delay);
+  opacity: var(--alpha);
+}
+
+.staff-line {
+  height: 1px;
+  background: rgba(255, 252, 245, var(--line-alpha, 0.6));
+  border-radius: 2px;
+  transform: scaleY(1.2);
+}
+
+@keyframes scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(33.33%); }
+}
+
+/* ── NOTES ── */
+.notes-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.note {
+  position: absolute;
+  animation: floatNote linear infinite;
+  animation-duration: var(--dur);
+  animation-delay: var(--delay);
+  opacity: 0;
+  top: var(--top);
+}
+
+@keyframes floatNote {
+  0%   { transform: translateX(110vw); opacity: 0; }
+  5%   { opacity: var(--max-alpha); }
+  85%  { opacity: var(--max-alpha); }
+  100% { transform: translateX(-20vw); opacity: 0; }
+}
+
+/* Note SVG sizing */
+.note svg {
+  width: var(--size);
+  height: auto;
+  filter: drop-shadow(0 1px 2px rgba(100,150,180,0.15));
+}
+
+/* ── PARTICLES ── */
+.particles {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  width: var(--r);
+  height: var(--r);
+  background: var(--col);
+  animation: rise linear infinite;
+  animation-duration: var(--dur);
+  animation-delay: var(--delay);
+  opacity: 0;
+  left: var(--left);
+  top: var(--top);
+}
+
+@keyframes rise {
+  0%   { transform: translateY(0) translateX(0); opacity: 0; }
+  10%  { opacity: var(--alpha); }
+  90%  { opacity: var(--alpha); }
+  100% { transform: translateY(-80px) translateX(var(--dx)); opacity: 0; }
+}
+
+/* ── WATERMARK ── */
+#watermark {
+  position: fixed;
+  bottom: 18px;
+  right: 24px;
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: rgba(120, 160, 200, 0.3);
+  text-transform: uppercase;
+  pointer-events: none;
+  user-select: none;
+  font-family: 'Georgia', serif;
+}
+</style>
+</head>
+<body>
+
+<div class="bg"></div>
+<div class="staves" id="staves"></div>
+<div class="notes-layer" id="notes"></div>
+<div class="particles" id="particles"></div>
+<div id="watermark">Ipnotec · v0.3</div>
+
+<script>
+// ── AUDIO ─────────────────────────────────────────────
+let audioCtx = null, masterGain = null, audioOn = false;
+
+function buildDrone() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0;
+  masterGain.connect(audioCtx.destination);
+  const delay = audioCtx.createDelay(2.0);
+  delay.delayTime.value = 0.42;
+  const dg = audioCtx.createGain(); dg.gain.value = 0.26;
+  delay.connect(dg); dg.connect(delay); delay.connect(masterGain);
+  [
+    [110.00, 0.09], [164.81, 0.05], [220.00, 0.055],
+    [329.63, 0.025], [440.00, 0.012]
+  ].forEach(([freq, gain]) => {
+    const osc = audioCtx.createOscillator();
+    const g   = audioCtx.createGain();
+    const lfo = audioCtx.createOscillator();
+    const lg  = audioCtx.createGain();
+    lfo.frequency.value = 0.15 + Math.random() * 0.12;
+    lg.gain.value = 0.4;
+    lfo.connect(lg); lg.connect(osc.frequency); lfo.start();
+    osc.type = 'sine'; osc.frequency.value = freq; g.gain.value = gain;
+    osc.connect(g); g.connect(delay); g.connect(masterGain); osc.start();
+  });
+}
+
+function toggleAudio() {
+  if (!audioCtx) buildDrone();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  if (!audioOn) {
+    masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+    masterGain.gain.setValueAtTime(masterGain.gain.value, audioCtx.currentTime);
+    masterGain.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 3.5);
+    audioOn = true;
+  } else {
+    masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+    masterGain.gain.setValueAtTime(masterGain.gain.value, audioCtx.currentTime);
+    masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 3.0);
+    audioOn = false;
+  }
+}
+document.addEventListener('click', toggleAudio);
+
+// ── COLORS ────────────────────────────────────────────
+const AQUA     = 'rgba(155,215,205,VAR)';
+const LAVENDER = 'rgba(196,178,222,VAR)';
+const TEAL     = 'rgba(135,198,215,VAR)';
+const CREAM    = 'rgba(255,252,245,VAR)';
+
+function col(template, a) { return template.replace('VAR', a); }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function pick(...arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+// ── BUILD STAVES ──────────────────────────────────────
+const stavesEl = document.getElementById('staves');
+const staveDefs = [
+  { top: 14, alpha: 0.18, dur: 38, gap: 7  },
+  { top: 32, alpha: 0.38, dur: 28, gap: 11 },
+  { top: 50, alpha: 0.55, dur: 22, gap: 15 },
+  { top: 68, alpha: 0.38, dur: 29, gap: 11 },
+  { top: 84, alpha: 0.18, dur: 40, gap: 7  },
+];
+
+staveDefs.forEach((d, i) => {
+  const staff = document.createElement('div');
+  staff.className = 'staff';
+  staff.style.cssText = `
+    --gap: ${d.gap}px;
+    --dur: ${d.dur}s;
+    --delay: -${rnd(0, d.dur)}s;
+    --alpha: ${d.alpha};
+    top: calc(${d.top}% - ${d.gap * 2}px);
+  `;
+  for (let l = 0; l < 5; l++) {
+    const line = document.createElement('div');
+    line.className = 'staff-line';
+    line.style.setProperty('--line-alpha', l === 2 ? 0.75 : 0.55);
+    staff.appendChild(line);
+  }
+  stavesEl.appendChild(staff);
+});
+
+// ── NOTE SVGs ─────────────────────────────────────────
+function svgQuarter(color) {
+  return `<svg viewBox="0 0 24 60" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="9" cy="50" rx="9" ry="6" transform="rotate(-20 9 50)" fill="${color}"/>
+    <path d="M17 48 C17.5 35 17.2 20 17.3 4" stroke="${color}" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+  </svg>`;
+}
+function svgHalf(color) {
+  return `<svg viewBox="0 0 24 60" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="9" cy="50" rx="9" ry="6" transform="rotate(-20 9 50)" fill="none" stroke="${color}" stroke-width="1.8"/>
+    <path d="M17 48 C17.5 35 17.2 20 17.3 4" stroke="${color}" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+  </svg>`;
+}
+function svgWhole(color) {
+  return `<svg viewBox="0 0 24 16" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="12" cy="8" rx="11" ry="7" transform="rotate(-15 12 8)" fill="none" stroke="${color}" stroke-width="1.8"/>
+  </svg>`;
+}
+function svgEighth(color) {
+  return `<svg viewBox="0 0 28 60" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="9" cy="50" rx="9" ry="6" transform="rotate(-20 9 50)" fill="${color}"/>
+    <path d="M17 48 C17.5 35 17.2 20 17.3 4" stroke="${color}" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+    <path d="M17.3 4 C26 8 27 18 20 22" stroke="${color}" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  </svg>`;
+}
+function svgSlur(color) {
+  return `<svg viewBox="0 0 60 20" xmlns="http://www.w3.org/2000/svg">
+    <path d="M2 16 C18 2 42 2 58 16" stroke="${color}" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.6"/>
+  </svg>`;
+}
+function svgBreath(color) {
+  return `<svg viewBox="0 0 14 18" xmlns="http://www.w3.org/2000/svg">
+    <path d="M2 14 C6 4 12 6 11 14" stroke="${color}" stroke-width="1.3" fill="none" stroke-linecap="round" opacity="0.55"/>
+  </svg>`;
+}
+function svgSlash(color) {
+  return `<svg viewBox="0 0 16 24" xmlns="http://www.w3.org/2000/svg">
+    <line x1="13" y1="2" x2="3" y2="22" stroke="${color}" stroke-width="1.4" stroke-linecap="round" opacity="0.5"/>
+  </svg>`;
+}
+
+const NOTE_BUILDERS = [
+  { fn: svgQuarter, w: 0.30, size: [18, 30] },
+  { fn: svgHalf,    w: 0.20, size: [18, 30] },
+  { fn: svgEighth,  w: 0.22, size: [18, 30] },
+  { fn: svgWhole,   w: 0.12, size: [22, 36] },
+  { fn: svgSlur,    w: 0.06, size: [36, 55] },
+  { fn: svgBreath,  w: 0.05, size: [12, 18] },
+  { fn: svgSlash,   w: 0.05, size: [10, 16] },
+];
+
+function pickNoteBuilder() {
+  const r = Math.random(); let acc = 0;
+  for (const b of NOTE_BUILDERS) { acc += b.w; if (r < acc) return b; }
+  return NOTE_BUILDERS[0];
+}
+
+// ── BUILD NOTES ───────────────────────────────────────
+const notesEl = document.getElementById('notes');
+const NOTE_COUNT = 28;
+
+for (let i = 0; i < NOTE_COUNT; i++) {
+  const builder  = pickNoteBuilder();
+  const colPick  = pick(AQUA, LAVENDER, TEAL);
+  const alpha    = rnd(0.25, 0.75);
+  const color    = col(colPick, alpha);
+  const size     = rnd(builder.size[0], builder.size[1]);
+  const top      = rnd(8, 88);
+  const dur      = rnd(14, 32);
+  const delay    = rnd(-32, 0);
+
+  const el = document.createElement('div');
+  el.className = 'note';
+  el.style.cssText = `
+    --dur: ${dur}s;
+    --delay: ${delay}s;
+    --top: ${top}%;
+    --size: ${size}px;
+    --max-alpha: ${alpha};
+  `;
+  el.innerHTML = builder.fn(color);
+  notesEl.appendChild(el);
+}
+
+// ── BUILD PARTICLES ───────────────────────────────────
+const particlesEl = document.getElementById('particles');
+for (let i = 0; i < 55; i++) {
+  const colPick = pick(AQUA, LAVENDER);
+  const r    = rnd(2, 5);
+  const el   = document.createElement('div');
+  el.className = 'particle';
+  el.style.cssText = `
+    --r: ${r}px;
+    --col: ${col(colPick, rnd(0.12, 0.28))};
+    --alpha: ${rnd(0.08, 0.22)};
+    --dur: ${rnd(8, 18)}s;
+    --delay: ${rnd(-18, 0)}s;
+    --left: ${rnd(0, 100)}%;
+    --top: ${rnd(20, 95)}%;
+    --dx: ${rnd(-15, 15)}px;
+  `;
+  particlesEl.appendChild(el);
+}
+
+// ── SERVICE WORKER ────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
+}
+</script>
+</body>
+</html>
